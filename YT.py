@@ -1,52 +1,46 @@
 import os
-import subprocess
 from flask import Flask, render_template_string, request
-import json
 from pathlib import Path
+from pytube import YouTube
 
 app = Flask(__name__)
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
-<head>
-    <title>YouTube Downloader</title>
-</head>
+<head><title>YouTube Downloader</title></head>
 <body>
     <h1>YouTube 下載工具</h1>
-    <form method=\"POST\" id=\"url-form\">
+    <form method="POST" id="url-form">
         <label>貼上 YouTube 網址：</label><br>
-        <input type=\"text\" name=\"url\" id=\"url\" style=\"width: 400px;\">
-        <button type=\"submit\">下載影片</button>
-        <button type=\"button\" id=\"download-mp3\">下載 MP3</button>
+        <input type="text" name="url" id="url" style="width: 400px;">
+        <button type="submit">下載影片</button>
+        <button type="button" id="download-mp3">下載 MP3</button>
     </form>
-
-    <div id=\"preview\" style=\"margin-top:20px;\"></div>
-
+    <div id="preview" style="margin-top:20px;"></div>
     <script>
-        document.getElementById(\"url-form\").onsubmit = async function(e) {
+        document.getElementById("url-form").onsubmit = async function(e) {
             e.preventDefault();
-            const url = document.getElementById(\"url\").value;
-            document.getElementById(\"preview\").innerHTML = '⏳ 正在下載影片...';
+            const url = document.getElementById("url").value;
+            document.getElementById("preview").innerHTML = '⏳ 正在下載影片...';
             const response = await fetch('/download_auto', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url })
             });
             const data = await response.text();
-            document.getElementById(\"preview\").innerHTML = data;
+            document.getElementById("preview").innerHTML = data;
         };
-
-        document.getElementById(\"download-mp3\").onclick = async function() {
-            const url = document.getElementById(\"url\").value;
-            document.getElementById(\"preview\").innerHTML = '🎵 正在下載 MP3...';
+        document.getElementById("download-mp3").onclick = async function() {
+            const url = document.getElementById("url").value;
+            document.getElementById("preview").innerHTML = '🎵 正在下載 MP3...';
             const response = await fetch('/download_mp3', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url })
             });
             const data = await response.text();
-            document.getElementById(\"preview\").innerHTML = data;
+            document.getElementById("preview").innerHTML = data;
         };
     </script>
 </body>
@@ -74,11 +68,12 @@ def download_auto():
     url = request.json.get('url')
     try:
         os.makedirs('downloads', exist_ok=True)
-        temp_cmd = ['yt-dlp', '--get-filename', '-o', '%(title)s.%(ext)s', url]
-        filename = subprocess.check_output(temp_cmd, text=True).strip()
+        yt = YouTube(url)
+        stream = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
+        filename = yt.title + ".mp4"
         output_path = generate_unique_path(os.path.join('downloads', filename))
-        subprocess.run(['yt-dlp', '-o', output_path, url])
-        return "✅ 影片下載完成（請查看 downloads 資料夾）"
+        stream.download(output_path=Path(output_path).parent, filename=Path(output_path).name)
+        return f"✅ 影片下載完成：{Path(output_path).name}"
     except Exception as e:
         return f"❌ 錯誤：{str(e)}"
 
@@ -87,14 +82,15 @@ def download_mp3():
     url = request.json.get('url')
     try:
         os.makedirs('downloads', exist_ok=True)
-        temp_cmd = ['yt-dlp', '--get-filename', '-x', '--audio-format', 'mp3', '-o', '%(title)s.%(ext)s', url]
-        filename = subprocess.check_output(temp_cmd, text=True).strip()
+        yt = YouTube(url)
+        stream = yt.streams.filter(only_audio=True).first()
+        filename = yt.title + ".mp3"
         output_path = generate_unique_path(os.path.join('downloads', filename))
-        subprocess.run(['yt-dlp', '-x', '--audio-format', 'mp3', '-o', output_path, url])
-        return "🎵 MP3 下載完成（請查看 downloads 資料夾）"
+        stream.download(output_path=Path(output_path).parent, filename=Path(output_path).name)
+        return f"🎵 MP3 下載完成：{Path(output_path).name}"
     except Exception as e:
         return f"❌ 錯誤：{str(e)}"
 
 if __name__ == '__main__':
     os.makedirs('downloads', exist_ok=True)
-    app.run(debug=True,host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
