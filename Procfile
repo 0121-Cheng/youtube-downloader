@@ -1,1 +1,1 @@
-web: gunicorn app:YT
+web: gunicorn app:app
